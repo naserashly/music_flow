@@ -60,11 +60,9 @@
     .pp { width: 32px; height: 32px; position: relative; }
     .pp::before, .pp::after { content: ""; position: absolute; inset: 0; margin: auto; transition: all .25s ease; background: #ffffff; border-radius: 4px; }
     
-    /* REQ 1: Play/Pause Icon Fix */
     .pp.play::before, .pp.play::after { width: 8px; height: 100%; }
     .pp.play::before { transform: translateX(-6px); }
     .pp.play::after { transform: translateX(6px); }
-    
     .pp.pause::before { width: 0; height: 0; border-left: 20px solid #ffffff; border-top: 14px solid transparent; border-bottom: 14px solid transparent; background: none; left: 6px; transform: translateX(0); }
     .pp.pause::after { display: none; }
 
@@ -75,7 +73,6 @@
     .lyrics-live { min-height: 200px; display: flex; align-items: center; justify-content: center; text-align: center; position: relative; }
     .lyric-wrap { max-width: 800px; padding: 20px; max-height: 50vh; overflow: hidden; -webkit-mask-image: linear-gradient(transparent 0%, black 25%, black 75%, transparent 100%); mask-image: linear-gradient(transparent 0%, black 25%, black 75%, transparent 100%); }
     
-    /* REQ 3: Increased Lyric Blur */
     .line { font-size: clamp(28px, 4vw, 42px); font-weight: 700; line-height: 1.5; opacity: .3; transform: scale(.95); transition: all .6s cubic-bezier(.2,.7,0,1); text-wrap: balance; margin: 20px 0; color: var(--fg); filter: blur(4px); }
     .line.active { opacity: 1; transform: scale(1); color: transparent; background: linear-gradient(125deg, #ff3b8d, #ff8c42, #58e894, #59b2ff, #ff3b8d); background-size: 200% 200%; -webkit-background-clip: text; background-clip: text; animation: colorful-text-flow 8s ease-in-out infinite; filter: none; }
     @keyframes colorful-text-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
@@ -126,21 +123,16 @@
             <div class="spacer"></div>
             <button id="admin-login-btn" class="tool">Admin Panel</button>
         </header>
-
         <main>
-            <!-- REQ 2: Search Fix - HTML Structure Change -->
             <div id="song-library-container">
                 <h1>Song Library</h1>
                 <div class="search-container">
                     <input type="text" id="search-box" class="search-box" placeholder="Find your favorite song...">
                     <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
                 </div>
-                <div id="song-library">
-                    <!-- Song cards will be injected here -->
-                </div>
+                <div id="song-library"></div>
                 <div id="library-status-message" class="library-message hidden"></div>
             </div>
-
             <div id="user-player-view" class="hidden">
                 <button id="back-to-library-btn" class="btn" style="margin-bottom: 20px;">&larr; Back to Library</button>
                 <div id="player-container">
@@ -208,14 +200,11 @@
 
 <script type="module">
     // --- FIREBASE INITIALIZATION ---
-    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
-    // TODO: Add SDKs for Firebase products that you want to use
-    // https://firebase.google.com/docs/web/setup#available-libraries
+    import { getFirestore, collection, getDocs, doc, addDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // Your web app's Firebase configuration
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
       apiKey: "AIzaSyBDglKUCdb640OPMbAhlY_neBNG6uN2Uds",
       authDomain: "musicflow-b5651.firebaseapp.com",
@@ -226,27 +215,24 @@
       measurementId: "G-E40ESW5FZH"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
-    console.log("Firebase Initialized Successfully");
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+    console.log("Firebase Initialized with Firestore and Storage");
 
-
-    // --- YOUR EXISTING WEBSITE CODE ---
+    // --- WEBSITE CODE MODIFIED FOR FIREBASE ---
     document.addEventListener('DOMContentLoaded', () => {
-        // --- STATE & CONFIG ---
         const state = {
-            project: { id: null, audioData: null, songTitle: '', lyrics: [] },
+            project: { id: null, audioFile: null, audioURL: '', songTitle: '', lyrics: [] },
             currentLineIndex: -1,
             activeViewPrefix: null,
         };
 
-        // --- DOM SELECTORS ---
         const $ = (sel) => document.querySelector(sel);
         const $$ = (sel) => document.querySelectorAll(sel);
         const audioPlayer = $('#audio-player');
 
-        // --- UTILITIES ---
         const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
         const fmt = (s) => {
             if (!isFinite(s)) return '00:00';
@@ -255,24 +241,11 @@
             return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
         };
 
-        // --- DATABASE ---
-        const db = {
-            get: () => JSON.parse(localStorage.getItem('lyricFlowSongs') || '[]'),
-            save: (songs) => localStorage.setItem('lyricFlowSongs', JSON.stringify(songs))
-        };
-
-        // --- VIEW MANAGEMENT ---
-        const showView = (viewName) => {
-            $('.view.hidden')?.classList.remove('hidden');
-            $$('.view').forEach(v => {
-                if (v.id !== viewName) v.classList.add('hidden');
-            });
-            
-            if (viewName === 'admin-view') {
-                setupAdminView();
-            } else {
-                setupUserView();
-            }
+        const showView = (viewId) => {
+            $$('.view').forEach(v => v.classList.add('hidden'));
+            $(viewId).classList.remove('hidden');
+            if (viewId === '#admin-view') setupAdminView();
+            else setupUserView();
         };
 
         const setupUserView = () => {
@@ -286,13 +259,12 @@
             clearEditorForm();
         };
 
-        // --- AUTHENTICATION ---
         const handleAdminLogin = () => {
             const pass = prompt('Enter Admin Password:');
             if (pass === 'fullstack.python') {
                 sessionStorage.setItem('isAdmin', 'true');
-                showView('admin-view');
-            } else if (pass !== null && pass !== '') {
+                showView('#admin-view');
+            } else if (pass) {
                 alert('Incorrect Password.');
             }
         };
@@ -302,41 +274,48 @@
             audioPlayer.pause();
             audioPlayer.src = '';
             state.activeViewPrefix = null;
-            showView('user-view');
+            showView('#user-view');
         };
 
-        // --- REQ 2: SEARCH FIX - JAVASCRIPT LOGIC ---
-        const populateSongLibrary = () => {
-            const songs = db.get();
+        const populateSongLibrary = async () => {
             const libraryEl = $('#song-library');
             const statusMsg = $('#library-status-message');
+            libraryEl.innerHTML = `<div class="library-message">Loading songs...</div>`;
             
-            libraryEl.innerHTML = ''; // Clear only the card container
-            statusMsg.classList.add('hidden'); // Hide message by default
+            try {
+                const querySnapshot = await getDocs(collection(db, "songs"));
+                const songs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            if (songs.length === 0) {
-                statusMsg.textContent = 'No songs available yet.';
-                statusMsg.classList.remove('hidden');
-                return;
-            }
+                libraryEl.innerHTML = '';
+                statusMsg.classList.add('hidden');
 
-            songs.forEach((song) => {
-                const card = document.createElement('div');
-                card.className = 'song-card';
-                card.innerHTML = `
-                    <div>
-                        <h3 class="song-title">${song.songTitle}</h3>
-                        <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 14px;">${song.lyrics.length} lyric lines</p>
-                    </div>
-                    <button class="btn primary play-song-btn">▶️ Play</button>
-                `;
-                card.querySelector('.play-song-btn').addEventListener('click', () => {
-                    loadSongIntoPlayer(song, 'user');
-                    $('#song-library-container').classList.add('hidden');
-                    $('#user-player-view').classList.remove('hidden');
+                if (songs.length === 0) {
+                    statusMsg.textContent = 'No songs available yet.';
+                    statusMsg.classList.remove('hidden');
+                    return;
+                }
+
+                songs.forEach(song => {
+                    const card = document.createElement('div');
+                    card.className = 'song-card';
+                    card.innerHTML = `
+                        <div>
+                            <h3 class="song-title">${song.songTitle}</h3>
+                            <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 14px;">${song.lyrics.length} lyric lines</p>
+                        </div>
+                        <button class="btn primary play-song-btn">▶️ Play</button>
+                    `;
+                    card.querySelector('.play-song-btn').addEventListener('click', () => {
+                        loadSongIntoPlayer({ ...song, audioData: song.audioURL }, 'user');
+                        $('#song-library-container').classList.add('hidden');
+                        $('#user-player-view').classList.remove('hidden');
+                    });
+                    libraryEl.appendChild(card);
                 });
-                libraryEl.appendChild(card);
-            });
+            } catch (error) {
+                console.error("Error fetching songs: ", error);
+                libraryEl.innerHTML = `<div class="library-message" style="color: var(--danger);">Failed to load songs.</div>`;
+            }
         };
 
         const filterSongs = (e) => {
@@ -352,20 +331,14 @@
                 if (isVisible) visibleCount++;
             });
             
-            const libraryIsEmpty = songCards.length === 0;
-            if (!libraryIsEmpty) {
-                if (visibleCount === 0 && query !== '') {
-                    statusMsg.textContent = `No results found for "${query}"`;
-                    statusMsg.classList.remove('hidden');
-                } else {
-                    statusMsg.classList.add('hidden');
-                }
+            if (songCards.length > 0) {
+                statusMsg.textContent = `No results found for "${query}"`;
+                statusMsg.classList.toggle('hidden', visibleCount > 0 || query === '');
             }
         };
         
-        // --- ADMIN EDITOR ---
         const clearEditorForm = () => {
-            state.project = { id: null, audioData: null, songTitle: '', lyrics: [] };
+            state.project = { id: null, audioFile: null, audioURL: '', songTitle: '', lyrics: [] };
             $('#songTitleInput').value = '';
             $('#fileName').textContent = '📁 Upload Audio File';
             $('#audioFile').value = ''; 
@@ -373,25 +346,22 @@
             $('#save-song-btn').textContent = '🚀 Save Song';
             $('#save-song-btn').disabled = false;
             
-            $(`#song-title-display-admin`).textContent = 'Song Preview';
+            $('#song-title-display-admin').textContent = 'Song Preview';
             renderLiveLyrics([], 'admin');
-            if (state.activeViewPrefix === 'admin' && audioPlayer.src) {
-                 audioPlayer.src = '';
-                 state.activeViewPrefix = null;
-            }
-        }
+            if (audioPlayer.src.startsWith('blob:')) URL.revokeObjectURL(audioPlayer.src);
+            if (state.activeViewPrefix === 'admin') audioPlayer.src = '';
+            state.activeViewPrefix = null;
+        };
 
         const handleAudioUpload = (event) => {
             const file = event.target.files[0];
             if (!file) return;
 
+            state.project.audioFile = file;
+            state.project.audioURL = URL.createObjectURL(file);
+            
             $('#fileName').textContent = `Selected: ${file.name}`;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                state.project.audioData = e.target.result;
-                loadSongIntoPlayer({ ...state.project, songTitle: $('#songTitleInput').value || 'Audio Preview' }, 'admin');
-            };
-            reader.readAsDataURL(file);
+            loadSongIntoPlayer({ ...state.project, songTitle: $('#songTitleInput').value || 'Audio Preview', audioData: state.project.audioURL }, 'admin');
         };
 
         const addNewLyricInputRow = (time = '', text = '') => {
@@ -413,122 +383,150 @@
                 const timeStr = row.querySelector('.time-input').value;
                 const text = row.querySelector('.lyric-text').value.trim();
                 if (text && timeStr) {
-                    const parts = timeStr.split(':');
+                    const parts = timeStr.replace(',', '.').split(':');
                     const secs = parts.length > 1 ? (parseInt(parts[0],10)*60) + parseFloat(parts[1]) : parseFloat(parts[0]);
-                    if (!isNaN(secs)) {
-                       lyrics.push({ text, start: secs });
-                    }
+                    if (!isNaN(secs)) lyrics.push({ text, start: secs });
                 }
             });
             return lyrics.sort((a, b) => a.start - b.start);
         };
 
         const handlePreviewLyrics = () => {
-            if (!state.project.audioData) {
-                alert('Please upload an audio file first.');
-                return;
-            }
+            if (!state.project.audioURL) return alert('Please upload an audio file first.');
             const currentLyrics = parseLyricsFromEditor();
             const currentTitle = $('#songTitleInput').value.trim() || 'Song Preview';
-            loadSongIntoPlayer({ ...state.project, lyrics: currentLyrics, songTitle: currentTitle }, 'admin');
+            loadSongIntoPlayer({ ...state.project, lyrics: currentLyrics, songTitle: currentTitle, audioData: state.project.audioURL }, 'admin');
         };
 
-        const handleSaveSong = () => {
+        const handleSaveSong = async () => {
             const saveBtn = $('#save-song-btn');
             state.project.lyrics = parseLyricsFromEditor();
             state.project.songTitle = $('#songTitleInput').value.trim();
 
             if (!state.project.songTitle) return alert('Please enter a song title.');
-            if (!state.project.audioData) return alert('Please upload an audio file for the song.');
+            if (!state.project.id && !state.project.audioFile) return alert('Please upload an audio file for the new song.');
 
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
             
-            setTimeout(() => { 
-                let songs = db.get();
-                if (state.project.id) {
-                    const index = songs.findIndex(s => s.id === state.project.id);
-                    if (index > -1) songs[index] = { ...state.project };
-                } else { 
-                    songs.push({ ...state.project, id: Date.now() });
+            try {
+                let finalAudioURL = state.project.audioURL;
+                if (state.project.audioFile) {
+                    saveBtn.textContent = 'Uploading audio...';
+                    const storageRef = ref(storage, `songs/${Date.now()}_${state.project.audioFile.name}`);
+                    const uploadResult = await uploadBytes(storageRef, state.project.audioFile);
+                    finalAudioURL = await getDownloadURL(uploadResult.ref);
                 }
-                db.save(songs);
+
+                const songData = {
+                    songTitle: state.project.songTitle,
+                    lyrics: state.project.lyrics,
+                    audioURL: finalAudioURL
+                };
                 
-                alert(`"${state.project.songTitle}" was saved successfully!`);
+                saveBtn.textContent = 'Saving data...';
+                if (state.project.id) {
+                    await setDoc(doc(db, "songs", state.project.id), songData, { merge: true });
+                    alert(`"${songData.songTitle}" was updated successfully!`);
+                } else { 
+                    await addDoc(collection(db, "songs"), songData);
+                    alert(`"${songData.songTitle}" was saved successfully!`);
+                }
                 
                 clearEditorForm();
                 populatePublishedSongsList();
-            }, 500);
+            } catch(error) {
+                console.error("Error saving song:", error);
+                alert("An error occurred while saving the song.");
+                saveBtn.disabled = false;
+                saveBtn.textContent = state.project.id ? '💾 Update Song' : '🚀 Save Song';
+            }
         };
         
-        // --- ADMIN SONG MANAGEMENT ---
-        const populatePublishedSongsList = () => {
-            const songs = db.get();
+        const populatePublishedSongsList = async () => {
             const listEl = $('#song-list');
-            listEl.innerHTML = '';
-            if (songs.length === 0) {
-                listEl.innerHTML = '<li class="library-message" style="font-size: 14px; padding: 20px 0;">No songs published.</li>';
-                return;
+            listEl.innerHTML = '<li>Loading...</li>';
+            try {
+                const querySnapshot = await getDocs(collection(db, "songs"));
+                listEl.innerHTML = '';
+                if (querySnapshot.empty) {
+                    listEl.innerHTML = '<li class="library-message" style="font-size: 14px; padding: 20px 0;">No songs published.</li>';
+                    return;
+                }
+                querySnapshot.forEach(docSnap => {
+                    const song = { id: docSnap.id, ...docSnap.data() };
+                    const item = document.createElement('li');
+                    item.className = 'song-list-item';
+                    item.innerHTML = `
+                        <span class="title">${song.songTitle}</span>
+                        <div class="actions">
+                            <button class="btn tool edit-btn">Edit</button>
+                            <button class="btn tool delete-btn">Delete</button>
+                        </div>
+                    `;
+                    item.querySelector('.edit-btn').onclick = () => loadSongForEditing(song.id);
+                    item.querySelector('.delete-btn').onclick = () => handleDeleteSong(song.id, song.songTitle, song.audioURL);
+                    listEl.appendChild(item);
+                });
+            } catch(error) {
+                 console.error("Error populating song list:", error);
+                 listEl.innerHTML = '<li style="color:var(--danger)">Failed to load songs.</li>';
             }
-            songs.forEach(song => {
-                const item = document.createElement('li');
-                item.className = 'song-list-item';
-                item.innerHTML = `
-                    <span class="title">${song.songTitle}</span>
-                    <div class="actions">
-                        <button class="btn tool edit-btn">Edit</button>
-                        <button class="btn tool delete-btn">Delete</button>
-                    </div>
-                `;
-                item.querySelector('.edit-btn').onclick = () => loadSongForEditing(song.id);
-                item.querySelector('.delete-btn').onclick = () => handleDeleteSong(song.id, song.songTitle);
-                listEl.appendChild(item);
-            });
         };
 
-        const loadSongForEditing = (songId) => {
-            const songs = db.get();
-            const songToEdit = songs.find(s => s.id === songId);
-            if (!songToEdit) return;
+        const loadSongForEditing = async (songId) => {
+            try {
+                const docSnap = await getDoc(doc(db, "songs", songId));
+                if (!docSnap.exists()) return alert("Song not found!");
+                
+                const songToEdit = { id: docSnap.id, ...docSnap.data() };
+                clearEditorForm();
+                state.project = {
+                    id: songToEdit.id,
+                    audioFile: null,
+                    audioURL: songToEdit.audioURL,
+                    songTitle: songToEdit.songTitle,
+                    lyrics: songToEdit.lyrics
+                };
 
-            clearEditorForm();
-            state.project = { ...songToEdit };
+                $('#songTitleInput').value = songToEdit.songTitle;
+                $('#fileName').textContent = 'Audio loaded. Upload new file to replace.';
+                songToEdit.lyrics.forEach(line => {
+                     const minutes = Math.floor(line.start / 60);
+                     const seconds = (line.start % 60).toFixed(2);
+                     const time = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(5, '0')}`;
+                     addNewLyricInputRow(time, line.text);
+                });
 
-            $('#songTitleInput').value = songToEdit.songTitle;
-            $('#fileName').textContent = 'Audio loaded. Upload new file to replace.';
-            $('#lyrics-editor-area').innerHTML = '';
-            songToEdit.lyrics.forEach(line => {
-                 const minutes = Math.floor(line.start / 60);
-                 const seconds = (line.start % 60).toFixed(2);
-                 const time = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(5, '0')}`;
-                 addNewLyricInputRow(time, line.text);
-            });
-
-            $('#save-song-btn').textContent = '💾 Update Song';
-            loadSongIntoPlayer(songToEdit, 'admin');
+                $('#save-song-btn').textContent = '💾 Update Song';
+                loadSongIntoPlayer({ ...songToEdit, audioData: songToEdit.audioURL }, 'admin');
+            } catch (error) {
+                console.error("Error loading song for editing:", error);
+                alert("Could not load song for editing.");
+            }
         };
 
-        const handleDeleteSong = (songId, songTitle) => {
+        const handleDeleteSong = async (songId, songTitle, audioURL) => {
             if (!confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return;
             
-            let songs = db.get().filter(s => s.id !== songId);
-            db.save(songs);
-            
-            populatePublishedSongsList();
-            alert(`"${songTitle}" has been deleted.`);
-            
-            if (state.project.id === songId) {
-                clearEditorForm();
+            try {
+                await deleteDoc(doc(db, "songs", songId));
+                await deleteObject(ref(storage, audioURL));
+                alert(`"${songTitle}" has been deleted successfully.`);
+                populatePublishedSongsList();
+                if (state.project.id === songId) clearEditorForm();
+            } catch (error) {
+                 console.error("Error deleting song:", error);
+                 alert("An error occurred during deletion.");
             }
         };
 
-        // --- AUDIO PLAYER & LYRICS ---
         const loadSongIntoPlayer = (song, viewPrefix) => {
             audioPlayer.pause();
+            if(audioPlayer.src.startsWith('blob:')) URL.revokeObjectURL(audioPlayer.src);
             audioPlayer.src = song.audioData || '';
             audioPlayer.currentTime = 0;
 
-            state.project = { ...song };
+            state.project = { ...state.project, ...song };
             state.activeViewPrefix = viewPrefix;
             state.currentLineIndex = -1;
             
@@ -540,16 +538,15 @@
         const updatePlayerUI = () => {
             if (!state.activeViewPrefix) return;
             const prefix = state.activeViewPrefix;
-            const { currentTime, duration } = audioPlayer;
+            const { currentTime, duration, paused } = audioPlayer;
 
             $(`#cur-time-${prefix}`).textContent = fmt(currentTime);
             $(`#dur-time-${prefix}`).textContent = fmt(duration);
-
-            if (isFinite(duration)) {
-                $(`#progress-bar-${prefix} .fill`).style.width = `${(currentTime / duration) * 100}%`;
-            }
-            $(`#pp-icon-${prefix}`).classList.toggle('play', !audioPlayer.paused);
-            $(`#pp-icon-${prefix}`).classList.toggle('pause', audioPlayer.paused);
+            const progress = isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0;
+            $(`#progress-bar-${prefix} .fill`).style.width = `${progress}%`;
+            
+            $(`#pp-icon-${prefix}`).classList.toggle('play', !paused);
+            $(`#pp-icon-${prefix}`).classList.toggle('pause', paused);
         };
 
         const renderLiveLyrics = (lyrics, prefix) => {
@@ -579,35 +576,28 @@
             if (newIndex !== state.currentLineIndex) {
                 state.currentLineIndex = newIndex;
                 const lines = $$(`#lyric-wrap-${prefix} .line`);
-                lines.forEach((el, i) => {
-                    el.classList.toggle('active', i === newIndex);
-                });
-                if (newIndex > -1) {
+                lines.forEach((el, i) => el.classList.toggle('active', i === newIndex));
+                if (newIndex > -1 && lines[newIndex]) {
                     lines[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             }
         };
         
-        // --- INITIALIZATION ---
         const init = () => {
-            // Global Listeners
             $('#admin-login-btn').addEventListener('click', handleAdminLogin);
             $('#logout-btn').addEventListener('click', handleLogout);
             $('#search-box').addEventListener('input', filterSongs);
             $('#back-to-library-btn').addEventListener('click', () => {
                 audioPlayer.pause();
-                $('#user-player-view').classList.add('hidden');
-                $('#song-library-container').classList.remove('hidden');
+                showView('#user-view');
             });
             
-            // Admin Editor listeners
             $('#audioFile').addEventListener('change', handleAudioUpload);
             $('#addLineBtn').addEventListener('click', () => addNewLyricInputRow());
             $('#preview-lyrics-btn').addEventListener('click', handlePreviewLyrics);
             $('#save-song-btn').addEventListener('click', handleSaveSong);
             $('#clear-form-btn').addEventListener('click', clearEditorForm);
 
-            // Player UI Listeners
             ['user', 'admin'].forEach(prefix => {
                 $(`#play-btn-${prefix}`).onclick = () => audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause();
                 $(`#progress-bar-${prefix}`).onclick = (e) => {
@@ -617,22 +607,14 @@
                 };
             });
 
-            // Audio Player core events
             audioPlayer.addEventListener('timeupdate', () => {
                 updatePlayerUI();
                 updateActiveLyrics(audioPlayer.currentTime);
             });
-            audioPlayer.addEventListener('play', updatePlayerUI);
-            audioPlayer.addEventListener('pause', updatePlayerUI);
-            audioPlayer.addEventListener('ended', updatePlayerUI);
-            audioPlayer.addEventListener('loadedmetadata', updatePlayerUI);
+            ['play', 'pause', 'ended', 'loadedmetadata'].forEach(evt => audioPlayer.addEventListener(evt, updatePlayerUI));
 
-            // Determine initial view
-            if (sessionStorage.getItem('isAdmin') === 'true') {
-                showView('admin-view');
-            } else {
-                showView('user-view');
-            }
+            if (sessionStorage.getItem('isAdmin') === 'true') showView('#admin-view');
+            else showView('#user-view');
         };
 
         init();
