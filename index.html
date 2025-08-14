@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LyricFlow Platform</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    :root{
+      --bg: #0A0A0F; --fg: #F0F2F5; --muted: #8A94A6;
+      --brand-hue: 250; --accent-hue: 190;
+      --brand: hsl(var(--brand-hue), 100%, 70%);
+      --accent: hsl(var(--accent-hue), 100%, 65%);
+      --danger: #ff5c7c; --card: hsla(230, 20%, 15%, 0.5);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 20px; --progress: 0%;
+    }
+    *{box-sizing:border-box}
+    html{ scroll-behavior: smooth; }
+    body{
+      margin:0; font: 16px/1.45 Inter, sans-serif;
+      color:var(--fg); background: var(--bg);
+      background-image: radial-gradient(1200px 1200px at 80% -20%, hsla(var(--brand-hue),90%,55%,.15), transparent 40%),
+                        radial-gradient(900px 900px at -20% 120%, hsla(var(--accent-hue),90%,55%,.12), transparent 50%);
+      transition: background 800ms ease;
+      overflow-y: auto;
+    }
+
+    .hidden { display: none !important; }
+    .view { min-height: 100vh; display: flex; flex-direction: column; padding: 24px; }
+
+    /* --- SHARED STYLES --- */
+    .app-header { display: flex; align-items: center; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;}
+    .logo { font-weight: 800; font-size: 20px; background: linear-gradient(90deg, var(--brand), var(--accent)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .spacer { flex: 1; }
+    .btn, .tool { appearance:none; border:none; outline:none; cursor:pointer; padding:12px 20px; border-radius:14px; background:var(--card); backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.1); color: var(--fg); font-family: inherit; font-weight: 700; transition: all .2s ease; }
+    .btn:hover, .tool:hover { transform: translateY(-2px); filter: brightness(1.2); box-shadow: 0 4px 15px rgba(0,0,0,.2); }
+    .btn:disabled { cursor: not-allowed; filter: brightness(0.7); transform: none; }
+    .btn.primary { background: linear-gradient(135deg, var(--brand), var(--accent)); color: #fff; box-shadow: 0 8px 24px hsla(var(--brand-hue), 90%, 55%, .35); }
+
+    /* --- USER VIEW STYLES --- */
+    #user-view h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; text-align: center; margin: 40px 0; background: linear-gradient(135deg, hsl(var(--brand-hue), 90%, 80%), hsl(var(--accent-hue), 90%, 80%)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .search-container { position: relative; max-width: 500px; margin: 0 auto 40px auto; }
+    .search-box { width: 100%; padding: 18px 55px 18px 25px; border-radius: 99px; background: var(--card); backdrop-filter: blur(20px); border: 2px solid rgba(255,255,255,0.1); color: var(--fg); font-family: inherit; font-size: 16px; font-weight: 500; transition: all 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    .search-box:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px hsla(var(--brand-hue), 90%, 65%, .2); }
+    .search-icon { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; stroke: var(--muted); stroke-width: 2; fill: none; pointer-events: none; }
+
+    #song-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; padding: 24px 0; }
+    .song-card { background: var(--card); backdrop-filter: blur(20px); padding: 24px; border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.1); transition: all .4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; }
+    .song-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); border-color: hsla(var(--brand-hue), 90%, 65%, .6); }
+    .song-card h3 { margin: 0; font-size: 18px; font-weight: 700; }
+    .library-message { text-align: center; color: var(--muted); font-size: 18px; padding: 60px 20px; grid-column: 1 / -1; }
+
+    #user-player-view { max-width: 900px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+    #player-container { margin: 20px 0; display: flex; flex-direction: column; gap: 30px; background: color-mix(in oklab, var(--card) 40%, transparent); backdrop-filter: blur(30px); border-radius: 28px; padding: clamp(24px, 5vw, 40px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .song-title-display { font-size: clamp(24px, 5vw, 36px); font-weight: 800; text-align: center; min-height: 40px; background: linear-gradient(135deg, var(--brand), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 10px; }
+    .playbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; }
+    .icon-btn { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, var(--brand), var(--accent)); cursor: pointer; transition: all 0.3s ease; box-shadow: 0 8px 20px hsla(var(--brand-hue), 90%, 55%, .3); }
+    .icon-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px hsla(var(--brand-hue), 90%, 55%, .4); }
+    .pp { width: 32px; height: 32px; position: relative; }
+    .pp::before, .pp::after { content: ""; position: absolute; inset: 0; margin: auto; transition: all .25s ease; background: #ffffff; border-radius: 4px; }
+    
+    /* REQ 1: Play/Pause Icon Fix */
+    .pp.play::before, .pp.play::after { width: 8px; height: 100%; }
+    .pp.play::before { transform: translateX(-6px); }
+    .pp.play::after { transform: translateX(6px); }
+    
+    .pp.pause::before { width: 0; height: 0; border-left: 20px solid #ffffff; border-top: 14px solid transparent; border-bottom: 14px solid transparent; background: none; left: 6px; transform: translateX(0); }
+    .pp.pause::after { display: none; }
+
+    .time { font-variant-numeric: tabular-nums; font-weight: 600; width: 120px; text-align: center; font-size: 15px; }
+    .progress { position: relative; height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); cursor: pointer; }
+    .progress .fill { position: absolute; inset: 0; width: var(--progress); background: linear-gradient(90deg, var(--brand), var(--accent)); border-radius: 999px; }
+
+    .lyrics-live { min-height: 200px; display: flex; align-items: center; justify-content: center; text-align: center; position: relative; }
+    .lyric-wrap { max-width: 800px; padding: 20px; max-height: 50vh; overflow: hidden; -webkit-mask-image: linear-gradient(transparent 0%, black 25%, black 75%, transparent 100%); mask-image: linear-gradient(transparent 0%, black 25%, black 75%, transparent 100%); }
+    
+    /* REQ 3: Increased Lyric Blur */
+    .line { font-size: clamp(28px, 4vw, 42px); font-weight: 700; line-height: 1.5; opacity: .3; transform: scale(.95); transition: all .6s cubic-bezier(.2,.7,0,1); text-wrap: balance; margin: 20px 0; color: var(--fg); filter: blur(4px); }
+    .line.active { opacity: 1; transform: scale(1); color: transparent; background: linear-gradient(125deg, #ff3b8d, #ff8c42, #58e894, #59b2ff, #ff3b8d); background-size: 200% 200%; -webkit-background-clip: text; background-clip: text; animation: colorful-text-flow 8s ease-in-out infinite; filter: none; }
+    @keyframes colorful-text-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+
+    /* --- ADMIN VIEW STYLES --- */
+    #admin-main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; min-height: 0; }
+    .panel { background: var(--card); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+    .panel-header { margin: 0; padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 14px; text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 1px; flex-shrink: 0; }
+    .panel-content { padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+    .lyrics-editor-area { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    .lyric-input-row { display: flex; gap: 12px; align-items: center; }
+    .lyric-input-row input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; color: var(--fg); font-family: inherit; font-size: 15px; transition: all 0.2s ease; }
+    .lyric-input-row input:focus { outline: none; border-color: var(--brand); background: rgba(0,0,0,0.4); }
+    .lyric-input-row .time-input { flex: 0 0 100px; } .lyric-input-row .lyric-text { flex: 1; }
+    .remove-line-btn { background: none; border: none; color: var(--danger); font-size: 24px; cursor: pointer; opacity: 0.6; transition: all .2s; } .remove-line-btn:hover { opacity: 1; transform: scale(1.1); }
+    #song-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+    .song-list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 10px; transition: background .2s; }
+    .song-list-item:hover { background: rgba(0,0,0,0.4); }
+    .song-list-item .title { font-weight: 500; }
+    .song-list-item .actions button { font-size: 12px; padding: 6px 10px; margin-left: 8px; border-radius: 8px; }
+    .btn.edit-btn { background-color: hsla(var(--accent-hue), 80%, 50%, .2); border-color: hsla(var(--accent-hue), 80%, 50%, .5); }
+    .btn.delete-btn { background-color: hsla(345, 100%, 60%, .2); border-color: hsla(345, 100%, 60%, .5); }
+
+    /* General Input Styles */
+    .form-input { padding: 16px 20px; border-radius: 14px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--fg); font-size: 16px; font-weight: 500; width: 100%; }
+    .form-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px hsla(var(--brand-hue), 90%, 65%, .15); }
+    .file-label { display: block; text-align: center; cursor: pointer; padding: 16px; border-radius: 14px; background: transparent; border: 2px dashed var(--muted); transition: all .2s; }
+    .file-label:hover { border-color: var(--brand); color: var(--brand); }
+
+    @media (max-width: 900px) {
+      #admin-main { grid-template-columns: 1fr; max-height: none; }
+      .view { padding: 16px; }
+    }
+    @media (max-width: 768px) {
+      #song-library { grid-template-columns: 1fr; }
+      .playbar { grid-template-columns: 1fr; gap: 16px; text-align: center; }
+      .playbar .time { grid-row: 2; margin: 0 auto; }
+      .playbar .progress { grid-row: 1; }
+      .playbar .icon-btn { grid-row: 3; margin: 0 auto; }
+    }
+  </style>
+</head>
+<body>
+    <!-- USER VIEW -->
+    <div id="user-view" class="view">
+        <header class="app-header">
+            <div class="logo">🎵 LyricFlow</div>
+            <div class="spacer"></div>
+            <button id="admin-login-btn" class="tool">Admin Panel</button>
+        </header>
+
+        <main>
+            <!-- REQ 2: Search Fix - HTML Structure Change -->
+            <div id="song-library-container">
+                <h1>Song Library</h1>
+                <div class="search-container">
+                    <input type="text" id="search-box" class="search-box" placeholder="Find your favorite song...">
+                    <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+                </div>
+                <div id="song-library">
+                    <!-- Song cards will be injected here -->
+                </div>
+                <div id="library-status-message" class="library-message hidden"></div>
+            </div>
+
+            <div id="user-player-view" class="hidden">
+                <button id="back-to-library-btn" class="btn" style="margin-bottom: 20px;">&larr; Back to Library</button>
+                <div id="player-container">
+                    <h2 id="song-title-display-user" class="song-title-display"></h2>
+                    <div class="playbar">
+                        <button id="play-btn-user" class="icon-btn"><div class="pp pause" id="pp-icon-user"></div></button>
+                        <div class="progress" id="progress-bar-user"><div class="fill"></div></div>
+                        <div class="time"><span id="cur-time-user">00:00</span> / <span id="dur-time-user">00:00</span></div>
+                    </div>
+                    <div class="lyrics-live"><div id="lyric-wrap-user" class="lyric-wrap"></div></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ADMIN VIEW -->
+    <div id="admin-view" class="view hidden">
+        <header class="app-header">
+            <div class="logo">👑 Admin Panel</div>
+            <div class="spacer"></div>
+            <button id="logout-btn" class="tool">Logout</button>
+        </header>
+        <main id="admin-main">
+            <section class="panel">
+                <h3 class="panel-header">Song Editor</h3>
+                <div class="panel-content">
+                    <input type="text" id="songTitleInput" class="form-input" placeholder="Enter Song Title...">
+                    <label class="file-label">
+                        <input id="audioFile" type="file" accept="audio/*" class="hidden" />
+                        <span id="fileName">📁 Upload Audio File</span>
+                    </label>
+                    <div id="lyrics-editor-area" class="lyrics-editor-area"></div>
+                    <button id="addLineBtn" class="tool" style="width: 100%;">➕ Add Lyric Line</button>
+                </div>
+                <div class="panel-header" style="border-top: 1px solid rgba(255,255,255,0.08); border-bottom: none; display: flex; gap: 12px; flex-wrap: wrap; padding: 16px 24px;">
+                    <button id="preview-lyrics-btn" class="tool">👁️ Preview</button>
+                    <button id="save-song-btn" class="btn primary">🚀 Save Song</button>
+                    <button id="clear-form-btn" class="tool">✨ New Song</button>
+                </div>
+            </section>
+            <div style="display: flex; flex-direction: column; gap: 24px; min-height: 0;">
+                <section class="panel">
+                    <h3 class="panel-header">Live Preview</h3>
+                    <div class="panel-content">
+                        <h2 id="song-title-display-admin" class="song-title-display">Song Preview</h2>
+                        <div class="playbar">
+                            <button id="play-btn-admin" class="icon-btn"><div class="pp pause" id="pp-icon-admin"></div></button>
+                            <div class="progress" id="progress-bar-admin"><div class="fill"></div></div>
+                            <div class="time"><span id="cur-time-admin">00:00</span> / <span id="dur-time-admin">00:00</span></div>
+                        </div>
+                        <div class="lyrics-live"><div id="lyric-wrap-admin" class="lyric-wrap"></div></div>
+                    </div>
+                </section>
+                <section class="panel" style="flex: 1; min-height: 0;">
+                    <h3 class="panel-header">Song Management</h3>
+                    <div class="panel-content">
+                        <ul id="song-list"></ul>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <audio id="audio-player"></audio>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE & CONFIG ---
+    const state = {
+        project: { id: null, audioData: null, songTitle: '', lyrics: [] },
+        currentLineIndex: -1,
+        activeViewPrefix: null,
+    };
+
+    // --- DOM SELECTORS ---
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+    const audioPlayer = $('#audio-player');
+
+    // --- UTILITIES ---
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const fmt = (s) => {
+        if (!isFinite(s)) return '00:00';
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    };
+
+    // --- DATABASE ---
+    const db = {
+        get: () => JSON.parse(localStorage.getItem('lyricFlowSongs') || '[]'),
+        save: (songs) => localStorage.setItem('lyricFlowSongs', JSON.stringify(songs))
+    };
+
+    // --- VIEW MANAGEMENT ---
+    const showView = (viewName) => {
+        $('.view.hidden')?.classList.remove('hidden');
+        $$('.view').forEach(v => {
+            if (v.id !== viewName) v.classList.add('hidden');
+        });
+        
+        if (viewName === 'admin-view') {
+            setupAdminView();
+        } else {
+            setupUserView();
+        }
+    };
+
+    const setupUserView = () => {
+        populateSongLibrary();
+        $('#user-player-view').classList.add('hidden');
+        $('#song-library-container').classList.remove('hidden');
+    };
+
+    const setupAdminView = () => {
+        populatePublishedSongsList();
+        clearEditorForm();
+    };
+
+    // --- AUTHENTICATION ---
+    const handleAdminLogin = () => {
+        const pass = prompt('Enter Admin Password:');
+        if (pass === 'fullstack.python') {
+            sessionStorage.setItem('isAdmin', 'true');
+            showView('admin-view');
+        } else if (pass !== null && pass !== '') {
+            alert('Incorrect Password.');
+        }
+    };
+
+    const handleLogout = () => {
+        sessionStorage.removeItem('isAdmin');
+        audioPlayer.pause();
+        audioPlayer.src = '';
+        state.activeViewPrefix = null;
+        showView('user-view');
+    };
+
+    // --- REQ 2: SEARCH FIX - JAVASCRIPT LOGIC ---
+    const populateSongLibrary = () => {
+        const songs = db.get();
+        const libraryEl = $('#song-library');
+        const statusMsg = $('#library-status-message');
+        
+        libraryEl.innerHTML = ''; // Clear only the card container
+        statusMsg.classList.add('hidden'); // Hide message by default
+
+        if (songs.length === 0) {
+            statusMsg.textContent = 'No songs available yet.';
+            statusMsg.classList.remove('hidden');
+            return;
+        }
+
+        songs.forEach((song) => {
+            const card = document.createElement('div');
+            card.className = 'song-card';
+            card.innerHTML = `
+                <div>
+                    <h3 class="song-title">${song.songTitle}</h3>
+                    <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 14px;">${song.lyrics.length} lyric lines</p>
+                </div>
+                <button class="btn primary play-song-btn">▶️ Play</button>
+            `;
+            card.querySelector('.play-song-btn').addEventListener('click', () => {
+                loadSongIntoPlayer(song, 'user');
+                $('#song-library-container').classList.add('hidden');
+                $('#user-player-view').classList.remove('hidden');
+            });
+            libraryEl.appendChild(card);
+        });
+    };
+
+    const filterSongs = (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const songCards = $$('.song-card');
+        const statusMsg = $('#library-status-message');
+        let visibleCount = 0;
+
+        songCards.forEach(card => {
+            const title = card.querySelector('.song-title').textContent.toLowerCase();
+            const isVisible = title.includes(query);
+            card.style.display = isVisible ? 'flex' : 'none';
+            if (isVisible) visibleCount++;
+        });
+        
+        const libraryIsEmpty = songCards.length === 0;
+        if (!libraryIsEmpty) {
+            if (visibleCount === 0 && query !== '') {
+                statusMsg.textContent = `No results found for "${query}"`;
+                statusMsg.classList.remove('hidden');
+            } else {
+                statusMsg.classList.add('hidden');
+            }
+        }
+    };
+    
+    // --- ADMIN EDITOR ---
+    const clearEditorForm = () => {
+        state.project = { id: null, audioData: null, songTitle: '', lyrics: [] };
+        $('#songTitleInput').value = '';
+        $('#fileName').textContent = '📁 Upload Audio File';
+        $('#audioFile').value = ''; 
+        $('#lyrics-editor-area').innerHTML = '';
+        $('#save-song-btn').textContent = '🚀 Save Song';
+        $('#save-song-btn').disabled = false;
+        
+        $(`#song-title-display-admin`).textContent = 'Song Preview';
+        renderLiveLyrics([], 'admin');
+        if (state.activeViewPrefix === 'admin' && audioPlayer.src) {
+             audioPlayer.src = '';
+             state.activeViewPrefix = null;
+        }
+    }
+
+    const handleAudioUpload = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        $('#fileName').textContent = `Selected: ${file.name}`;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            state.project.audioData = e.target.result;
+            loadSongIntoPlayer({ ...state.project, songTitle: $('#songTitleInput').value || 'Audio Preview' }, 'admin');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const addNewLyricInputRow = (time = '', text = '') => {
+        const editorArea = $('#lyrics-editor-area');
+        const row = document.createElement('div');
+        row.className = 'lyric-input-row';
+        row.innerHTML = `
+            <input type="text" class="time-input" placeholder="mm:ss.ms" value="${time}">
+            <input type="text" class="lyric-text" placeholder="Enter lyric line..." value="${text}">
+            <button class="remove-line-btn">×</button>
+        `;
+        row.querySelector('.remove-line-btn').onclick = () => row.remove();
+        editorArea.appendChild(row);
+    };
+
+    const parseLyricsFromEditor = () => {
+        const lyrics = [];
+        $$('#lyrics-editor-area .lyric-input-row').forEach(row => {
+            const timeStr = row.querySelector('.time-input').value;
+            const text = row.querySelector('.lyric-text').value.trim();
+            if (text && timeStr) {
+                const parts = timeStr.split(':');
+                const secs = parts.length > 1 ? (parseInt(parts[0],10)*60) + parseFloat(parts[1]) : parseFloat(parts[0]);
+                if (!isNaN(secs)) {
+                   lyrics.push({ text, start: secs });
+                }
+            }
+        });
+        return lyrics.sort((a, b) => a.start - b.start);
+    };
+
+    const handlePreviewLyrics = () => {
+        if (!state.project.audioData) {
+            alert('Please upload an audio file first.');
+            return;
+        }
+        const currentLyrics = parseLyricsFromEditor();
+        const currentTitle = $('#songTitleInput').value.trim() || 'Song Preview';
+        loadSongIntoPlayer({ ...state.project, lyrics: currentLyrics, songTitle: currentTitle }, 'admin');
+    };
+
+    const handleSaveSong = () => {
+        const saveBtn = $('#save-song-btn');
+        state.project.lyrics = parseLyricsFromEditor();
+        state.project.songTitle = $('#songTitleInput').value.trim();
+
+        if (!state.project.songTitle) return alert('Please enter a song title.');
+        if (!state.project.audioData) return alert('Please upload an audio file for the song.');
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
+        setTimeout(() => { 
+            let songs = db.get();
+            if (state.project.id) {
+                const index = songs.findIndex(s => s.id === state.project.id);
+                if (index > -1) songs[index] = { ...state.project };
+            } else { 
+                songs.push({ ...state.project, id: Date.now() });
+            }
+            db.save(songs);
+            
+            alert(`"${state.project.songTitle}" was saved successfully!`);
+            
+            clearEditorForm();
+            populatePublishedSongsList();
+        }, 500);
+    };
+    
+    // --- ADMIN SONG MANAGEMENT ---
+    const populatePublishedSongsList = () => {
+        const songs = db.get();
+        const listEl = $('#song-list');
+        listEl.innerHTML = '';
+        if (songs.length === 0) {
+            listEl.innerHTML = '<li class="library-message" style="font-size: 14px; padding: 20px 0;">No songs published.</li>';
+            return;
+        }
+        songs.forEach(song => {
+            const item = document.createElement('li');
+            item.className = 'song-list-item';
+            item.innerHTML = `
+                <span class="title">${song.songTitle}</span>
+                <div class="actions">
+                    <button class="btn tool edit-btn">Edit</button>
+                    <button class="btn tool delete-btn">Delete</button>
+                </div>
+            `;
+            item.querySelector('.edit-btn').onclick = () => loadSongForEditing(song.id);
+            item.querySelector('.delete-btn').onclick = () => handleDeleteSong(song.id, song.songTitle);
+            listEl.appendChild(item);
+        });
+    };
+
+    const loadSongForEditing = (songId) => {
+        const songs = db.get();
+        const songToEdit = songs.find(s => s.id === songId);
+        if (!songToEdit) return;
+
+        clearEditorForm();
+        state.project = { ...songToEdit };
+
+        $('#songTitleInput').value = songToEdit.songTitle;
+        $('#fileName').textContent = 'Audio loaded. Upload new file to replace.';
+        $('#lyrics-editor-area').innerHTML = '';
+        songToEdit.lyrics.forEach(line => {
+             const minutes = Math.floor(line.start / 60);
+             const seconds = (line.start % 60).toFixed(2);
+             const time = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(5, '0')}`;
+             addNewLyricInputRow(time, line.text);
+        });
+
+        $('#save-song-btn').textContent = '💾 Update Song';
+        loadSongIntoPlayer(songToEdit, 'admin');
+    };
+
+    const handleDeleteSong = (songId, songTitle) => {
+        if (!confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return;
+        
+        let songs = db.get().filter(s => s.id !== songId);
+        db.save(songs);
+        
+        populatePublishedSongsList();
+        alert(`"${songTitle}" has been deleted.`);
+        
+        if (state.project.id === songId) {
+            clearEditorForm();
+        }
+    };
+
+    // --- AUDIO PLAYER & LYRICS ---
+    const loadSongIntoPlayer = (song, viewPrefix) => {
+        audioPlayer.pause();
+        audioPlayer.src = song.audioData || '';
+        audioPlayer.currentTime = 0;
+
+        state.project = { ...song };
+        state.activeViewPrefix = viewPrefix;
+        state.currentLineIndex = -1;
+        
+        $(`#song-title-display-${viewPrefix}`).textContent = song.songTitle || 'Untitled Song';
+        renderLiveLyrics(song.lyrics || [], viewPrefix);
+        updatePlayerUI();
+    };
+
+    const updatePlayerUI = () => {
+        if (!state.activeViewPrefix) return;
+        const prefix = state.activeViewPrefix;
+        const { currentTime, duration } = audioPlayer;
+
+        $(`#cur-time-${prefix}`).textContent = fmt(currentTime);
+        $(`#dur-time-${prefix}`).textContent = fmt(duration);
+
+        if (isFinite(duration)) {
+            $(`#progress-bar-${prefix} .fill`).style.width = `${(currentTime / duration) * 100}%`;
+        }
+        $(`#pp-icon-${prefix}`).classList.toggle('play', !audioPlayer.paused);
+        $(`#pp-icon-${prefix}`).classList.toggle('pause', audioPlayer.paused);
+    };
+
+    const renderLiveLyrics = (lyrics, prefix) => {
+        const lyricWrap = $(`#lyric-wrap-${prefix}`);
+        lyricWrap.innerHTML = '';
+        if (!lyrics || lyrics.length === 0) {
+            lyricWrap.innerHTML = '<div class="line" style="opacity: 0.5; filter: none;">Lyrics will appear here.</div>';
+            return;
+        }
+        lyrics.forEach(line => {
+            const div = document.createElement('div');
+            div.className = 'line';
+            div.textContent = line.text;
+            lyricWrap.appendChild(div);
+        });
+    };
+
+    const updateActiveLyrics = (time) => {
+        if (!state.activeViewPrefix || !state.project.lyrics || state.project.lyrics.length === 0) return;
+        
+        const prefix = state.activeViewPrefix;
+        let newIndex = state.project.lyrics.findIndex((line, i) => {
+            const nextLine = state.project.lyrics[i + 1];
+            return time >= line.start && (!nextLine || time < nextLine.start);
+        });
+
+        if (newIndex !== state.currentLineIndex) {
+            state.currentLineIndex = newIndex;
+            const lines = $$(`#lyric-wrap-${prefix} .line`);
+            lines.forEach((el, i) => {
+                el.classList.toggle('active', i === newIndex);
+            });
+            if (newIndex > -1) {
+                lines[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    };
+    
+    // --- INITIALIZATION ---
+    const init = () => {
+        // Global Listeners
+        $('#admin-login-btn').addEventListener('click', handleAdminLogin);
+        $('#logout-btn').addEventListener('click', handleLogout);
+        $('#search-box').addEventListener('input', filterSongs);
+        $('#back-to-library-btn').addEventListener('click', () => {
+            audioPlayer.pause();
+            $('#user-player-view').classList.add('hidden');
+            $('#song-library-container').classList.remove('hidden');
+        });
+        
+        // Admin Editor listeners
+        $('#audioFile').addEventListener('change', handleAudioUpload);
+        $('#addLineBtn').addEventListener('click', () => addNewLyricInputRow());
+        $('#preview-lyrics-btn').addEventListener('click', handlePreviewLyrics);
+        $('#save-song-btn').addEventListener('click', handleSaveSong);
+        $('#clear-form-btn').addEventListener('click', clearEditorForm);
+
+        // Player UI Listeners
+        ['user', 'admin'].forEach(prefix => {
+            $(`#play-btn-${prefix}`).onclick = () => audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause();
+            $(`#progress-bar-${prefix}`).onclick = (e) => {
+                if (!isFinite(audioPlayer.duration)) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                audioPlayer.currentTime = clamp((e.clientX - rect.left) / rect.width, 0, 1) * audioPlayer.duration;
+            };
+        });
+
+        // Audio Player core events
+        audioPlayer.addEventListener('timeupdate', () => {
+            updatePlayerUI();
+            updateActiveLyrics(audioPlayer.currentTime);
+        });
+        audioPlayer.addEventListener('play', updatePlayerUI);
+        audioPlayer.addEventListener('pause', updatePlayerUI);
+        audioPlayer.addEventListener('ended', updatePlayerUI);
+        audioPlayer.addEventListener('loadedmetadata', updatePlayerUI);
+
+        // Determine initial view
+        if (sessionStorage.getItem('isAdmin') === 'true') {
+            showView('admin-view');
+        } else {
+            showView('user-view');
+        }
+    };
+
+    init();
+});
+</script>
+</body>
+</html>
