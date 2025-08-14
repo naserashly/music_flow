@@ -206,411 +206,437 @@
 
     <audio id="audio-player"></audio>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // --- STATE & CONFIG ---
-    const state = {
-        project: { id: null, audioData: null, songTitle: '', lyrics: [] },
-        currentLineIndex: -1,
-        activeViewPrefix: null,
+<script type="module">
+    // --- FIREBASE INITIALIZATION ---
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyBDglKUCdb640OPMbAhlY_neBNG6uN2Uds",
+      authDomain: "musicflow-b5651.firebaseapp.com",
+      projectId: "musicflow-b5651",
+      storageBucket: "musicflow-b5651.firebasestorage.app",
+      messagingSenderId: "522557409379",
+      appId: "1:522557409379:web:18df960e9c09d9c1da9056",
+      measurementId: "G-E40ESW5FZH"
     };
 
-    // --- DOM SELECTORS ---
-    const $ = (sel) => document.querySelector(sel);
-    const $$ = (sel) => document.querySelectorAll(sel);
-    const audioPlayer = $('#audio-player');
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    console.log("Firebase Initialized Successfully");
 
-    // --- UTILITIES ---
-    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-    const fmt = (s) => {
-        if (!isFinite(s)) return '00:00';
-        const m = Math.floor(s / 60);
-        const sec = Math.floor(s % 60);
-        return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    };
 
-    // --- DATABASE ---
-    const db = {
-        get: () => JSON.parse(localStorage.getItem('lyricFlowSongs') || '[]'),
-        save: (songs) => localStorage.setItem('lyricFlowSongs', JSON.stringify(songs))
-    };
-
-    // --- VIEW MANAGEMENT ---
-    const showView = (viewName) => {
-        $('.view.hidden')?.classList.remove('hidden');
-        $$('.view').forEach(v => {
-            if (v.id !== viewName) v.classList.add('hidden');
-        });
-        
-        if (viewName === 'admin-view') {
-            setupAdminView();
-        } else {
-            setupUserView();
-        }
-    };
-
-    const setupUserView = () => {
-        populateSongLibrary();
-        $('#user-player-view').classList.add('hidden');
-        $('#song-library-container').classList.remove('hidden');
-    };
-
-    const setupAdminView = () => {
-        populatePublishedSongsList();
-        clearEditorForm();
-    };
-
-    // --- AUTHENTICATION ---
-    const handleAdminLogin = () => {
-        const pass = prompt('Enter Admin Password:');
-        if (pass === 'fullstack.python') {
-            sessionStorage.setItem('isAdmin', 'true');
-            showView('admin-view');
-        } else if (pass !== null && pass !== '') {
-            alert('Incorrect Password.');
-        }
-    };
-
-    const handleLogout = () => {
-        sessionStorage.removeItem('isAdmin');
-        audioPlayer.pause();
-        audioPlayer.src = '';
-        state.activeViewPrefix = null;
-        showView('user-view');
-    };
-
-    // --- REQ 2: SEARCH FIX - JAVASCRIPT LOGIC ---
-    const populateSongLibrary = () => {
-        const songs = db.get();
-        const libraryEl = $('#song-library');
-        const statusMsg = $('#library-status-message');
-        
-        libraryEl.innerHTML = ''; // Clear only the card container
-        statusMsg.classList.add('hidden'); // Hide message by default
-
-        if (songs.length === 0) {
-            statusMsg.textContent = 'No songs available yet.';
-            statusMsg.classList.remove('hidden');
-            return;
-        }
-
-        songs.forEach((song) => {
-            const card = document.createElement('div');
-            card.className = 'song-card';
-            card.innerHTML = `
-                <div>
-                    <h3 class="song-title">${song.songTitle}</h3>
-                    <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 14px;">${song.lyrics.length} lyric lines</p>
-                </div>
-                <button class="btn primary play-song-btn">▶️ Play</button>
-            `;
-            card.querySelector('.play-song-btn').addEventListener('click', () => {
-                loadSongIntoPlayer(song, 'user');
-                $('#song-library-container').classList.add('hidden');
-                $('#user-player-view').classList.remove('hidden');
-            });
-            libraryEl.appendChild(card);
-        });
-    };
-
-    const filterSongs = (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        const songCards = $$('.song-card');
-        const statusMsg = $('#library-status-message');
-        let visibleCount = 0;
-
-        songCards.forEach(card => {
-            const title = card.querySelector('.song-title').textContent.toLowerCase();
-            const isVisible = title.includes(query);
-            card.style.display = isVisible ? 'flex' : 'none';
-            if (isVisible) visibleCount++;
-        });
-        
-        const libraryIsEmpty = songCards.length === 0;
-        if (!libraryIsEmpty) {
-            if (visibleCount === 0 && query !== '') {
-                statusMsg.textContent = `No results found for "${query}"`;
-                statusMsg.classList.remove('hidden');
-            } else {
-                statusMsg.classList.add('hidden');
-            }
-        }
-    };
-    
-    // --- ADMIN EDITOR ---
-    const clearEditorForm = () => {
-        state.project = { id: null, audioData: null, songTitle: '', lyrics: [] };
-        $('#songTitleInput').value = '';
-        $('#fileName').textContent = '📁 Upload Audio File';
-        $('#audioFile').value = ''; 
-        $('#lyrics-editor-area').innerHTML = '';
-        $('#save-song-btn').textContent = '🚀 Save Song';
-        $('#save-song-btn').disabled = false;
-        
-        $(`#song-title-display-admin`).textContent = 'Song Preview';
-        renderLiveLyrics([], 'admin');
-        if (state.activeViewPrefix === 'admin' && audioPlayer.src) {
-             audioPlayer.src = '';
-             state.activeViewPrefix = null;
-        }
-    }
-
-    const handleAudioUpload = (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        $('#fileName').textContent = `Selected: ${file.name}`;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            state.project.audioData = e.target.result;
-            loadSongIntoPlayer({ ...state.project, songTitle: $('#songTitleInput').value || 'Audio Preview' }, 'admin');
+    // --- YOUR EXISTING WEBSITE CODE ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- STATE & CONFIG ---
+        const state = {
+            project: { id: null, audioData: null, songTitle: '', lyrics: [] },
+            currentLineIndex: -1,
+            activeViewPrefix: null,
         };
-        reader.readAsDataURL(file);
-    };
 
-    const addNewLyricInputRow = (time = '', text = '') => {
-        const editorArea = $('#lyrics-editor-area');
-        const row = document.createElement('div');
-        row.className = 'lyric-input-row';
-        row.innerHTML = `
-            <input type="text" class="time-input" placeholder="mm:ss.ms" value="${time}">
-            <input type="text" class="lyric-text" placeholder="Enter lyric line..." value="${text}">
-            <button class="remove-line-btn">×</button>
-        `;
-        row.querySelector('.remove-line-btn').onclick = () => row.remove();
-        editorArea.appendChild(row);
-    };
+        // --- DOM SELECTORS ---
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => document.querySelectorAll(sel);
+        const audioPlayer = $('#audio-player');
 
-    const parseLyricsFromEditor = () => {
-        const lyrics = [];
-        $$('#lyrics-editor-area .lyric-input-row').forEach(row => {
-            const timeStr = row.querySelector('.time-input').value;
-            const text = row.querySelector('.lyric-text').value.trim();
-            if (text && timeStr) {
-                const parts = timeStr.split(':');
-                const secs = parts.length > 1 ? (parseInt(parts[0],10)*60) + parseFloat(parts[1]) : parseFloat(parts[0]);
-                if (!isNaN(secs)) {
-                   lyrics.push({ text, start: secs });
-                }
-            }
-        });
-        return lyrics.sort((a, b) => a.start - b.start);
-    };
+        // --- UTILITIES ---
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const fmt = (s) => {
+            if (!isFinite(s)) return '00:00';
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+        };
 
-    const handlePreviewLyrics = () => {
-        if (!state.project.audioData) {
-            alert('Please upload an audio file first.');
-            return;
-        }
-        const currentLyrics = parseLyricsFromEditor();
-        const currentTitle = $('#songTitleInput').value.trim() || 'Song Preview';
-        loadSongIntoPlayer({ ...state.project, lyrics: currentLyrics, songTitle: currentTitle }, 'admin');
-    };
+        // --- DATABASE ---
+        const db = {
+            get: () => JSON.parse(localStorage.getItem('lyricFlowSongs') || '[]'),
+            save: (songs) => localStorage.setItem('lyricFlowSongs', JSON.stringify(songs))
+        };
 
-    const handleSaveSong = () => {
-        const saveBtn = $('#save-song-btn');
-        state.project.lyrics = parseLyricsFromEditor();
-        state.project.songTitle = $('#songTitleInput').value.trim();
-
-        if (!state.project.songTitle) return alert('Please enter a song title.');
-        if (!state.project.audioData) return alert('Please upload an audio file for the song.');
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        
-        setTimeout(() => { 
-            let songs = db.get();
-            if (state.project.id) {
-                const index = songs.findIndex(s => s.id === state.project.id);
-                if (index > -1) songs[index] = { ...state.project };
-            } else { 
-                songs.push({ ...state.project, id: Date.now() });
-            }
-            db.save(songs);
-            
-            alert(`"${state.project.songTitle}" was saved successfully!`);
-            
-            clearEditorForm();
-            populatePublishedSongsList();
-        }, 500);
-    };
-    
-    // --- ADMIN SONG MANAGEMENT ---
-    const populatePublishedSongsList = () => {
-        const songs = db.get();
-        const listEl = $('#song-list');
-        listEl.innerHTML = '';
-        if (songs.length === 0) {
-            listEl.innerHTML = '<li class="library-message" style="font-size: 14px; padding: 20px 0;">No songs published.</li>';
-            return;
-        }
-        songs.forEach(song => {
-            const item = document.createElement('li');
-            item.className = 'song-list-item';
-            item.innerHTML = `
-                <span class="title">${song.songTitle}</span>
-                <div class="actions">
-                    <button class="btn tool edit-btn">Edit</button>
-                    <button class="btn tool delete-btn">Delete</button>
-                </div>
-            `;
-            item.querySelector('.edit-btn').onclick = () => loadSongForEditing(song.id);
-            item.querySelector('.delete-btn').onclick = () => handleDeleteSong(song.id, song.songTitle);
-            listEl.appendChild(item);
-        });
-    };
-
-    const loadSongForEditing = (songId) => {
-        const songs = db.get();
-        const songToEdit = songs.find(s => s.id === songId);
-        if (!songToEdit) return;
-
-        clearEditorForm();
-        state.project = { ...songToEdit };
-
-        $('#songTitleInput').value = songToEdit.songTitle;
-        $('#fileName').textContent = 'Audio loaded. Upload new file to replace.';
-        $('#lyrics-editor-area').innerHTML = '';
-        songToEdit.lyrics.forEach(line => {
-             const minutes = Math.floor(line.start / 60);
-             const seconds = (line.start % 60).toFixed(2);
-             const time = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(5, '0')}`;
-             addNewLyricInputRow(time, line.text);
-        });
-
-        $('#save-song-btn').textContent = '💾 Update Song';
-        loadSongIntoPlayer(songToEdit, 'admin');
-    };
-
-    const handleDeleteSong = (songId, songTitle) => {
-        if (!confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return;
-        
-        let songs = db.get().filter(s => s.id !== songId);
-        db.save(songs);
-        
-        populatePublishedSongsList();
-        alert(`"${songTitle}" has been deleted.`);
-        
-        if (state.project.id === songId) {
-            clearEditorForm();
-        }
-    };
-
-    // --- AUDIO PLAYER & LYRICS ---
-    const loadSongIntoPlayer = (song, viewPrefix) => {
-        audioPlayer.pause();
-        audioPlayer.src = song.audioData || '';
-        audioPlayer.currentTime = 0;
-
-        state.project = { ...song };
-        state.activeViewPrefix = viewPrefix;
-        state.currentLineIndex = -1;
-        
-        $(`#song-title-display-${viewPrefix}`).textContent = song.songTitle || 'Untitled Song';
-        renderLiveLyrics(song.lyrics || [], viewPrefix);
-        updatePlayerUI();
-    };
-
-    const updatePlayerUI = () => {
-        if (!state.activeViewPrefix) return;
-        const prefix = state.activeViewPrefix;
-        const { currentTime, duration } = audioPlayer;
-
-        $(`#cur-time-${prefix}`).textContent = fmt(currentTime);
-        $(`#dur-time-${prefix}`).textContent = fmt(duration);
-
-        if (isFinite(duration)) {
-            $(`#progress-bar-${prefix} .fill`).style.width = `${(currentTime / duration) * 100}%`;
-        }
-        $(`#pp-icon-${prefix}`).classList.toggle('play', !audioPlayer.paused);
-        $(`#pp-icon-${prefix}`).classList.toggle('pause', audioPlayer.paused);
-    };
-
-    const renderLiveLyrics = (lyrics, prefix) => {
-        const lyricWrap = $(`#lyric-wrap-${prefix}`);
-        lyricWrap.innerHTML = '';
-        if (!lyrics || lyrics.length === 0) {
-            lyricWrap.innerHTML = '<div class="line" style="opacity: 0.5; filter: none;">Lyrics will appear here.</div>';
-            return;
-        }
-        lyrics.forEach(line => {
-            const div = document.createElement('div');
-            div.className = 'line';
-            div.textContent = line.text;
-            lyricWrap.appendChild(div);
-        });
-    };
-
-    const updateActiveLyrics = (time) => {
-        if (!state.activeViewPrefix || !state.project.lyrics || state.project.lyrics.length === 0) return;
-        
-        const prefix = state.activeViewPrefix;
-        let newIndex = state.project.lyrics.findIndex((line, i) => {
-            const nextLine = state.project.lyrics[i + 1];
-            return time >= line.start && (!nextLine || time < nextLine.start);
-        });
-
-        if (newIndex !== state.currentLineIndex) {
-            state.currentLineIndex = newIndex;
-            const lines = $$(`#lyric-wrap-${prefix} .line`);
-            lines.forEach((el, i) => {
-                el.classList.toggle('active', i === newIndex);
+        // --- VIEW MANAGEMENT ---
+        const showView = (viewName) => {
+            $('.view.hidden')?.classList.remove('hidden');
+            $$('.view').forEach(v => {
+                if (v.id !== viewName) v.classList.add('hidden');
             });
-            if (newIndex > -1) {
-                lines[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            if (viewName === 'admin-view') {
+                setupAdminView();
+            } else {
+                setupUserView();
             }
-        }
-    };
-    
-    // --- INITIALIZATION ---
-    const init = () => {
-        // Global Listeners
-        $('#admin-login-btn').addEventListener('click', handleAdminLogin);
-        $('#logout-btn').addEventListener('click', handleLogout);
-        $('#search-box').addEventListener('input', filterSongs);
-        $('#back-to-library-btn').addEventListener('click', () => {
-            audioPlayer.pause();
+        };
+
+        const setupUserView = () => {
+            populateSongLibrary();
             $('#user-player-view').classList.add('hidden');
             $('#song-library-container').classList.remove('hidden');
-        });
-        
-        // Admin Editor listeners
-        $('#audioFile').addEventListener('change', handleAudioUpload);
-        $('#addLineBtn').addEventListener('click', () => addNewLyricInputRow());
-        $('#preview-lyrics-btn').addEventListener('click', handlePreviewLyrics);
-        $('#save-song-btn').addEventListener('click', handleSaveSong);
-        $('#clear-form-btn').addEventListener('click', clearEditorForm);
+        };
 
-        // Player UI Listeners
-        ['user', 'admin'].forEach(prefix => {
-            $(`#play-btn-${prefix}`).onclick = () => audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause();
-            $(`#progress-bar-${prefix}`).onclick = (e) => {
-                if (!isFinite(audioPlayer.duration)) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                audioPlayer.currentTime = clamp((e.clientX - rect.left) / rect.width, 0, 1) * audioPlayer.duration;
-            };
-        });
+        const setupAdminView = () => {
+            populatePublishedSongsList();
+            clearEditorForm();
+        };
 
-        // Audio Player core events
-        audioPlayer.addEventListener('timeupdate', () => {
-            updatePlayerUI();
-            updateActiveLyrics(audioPlayer.currentTime);
-        });
-        audioPlayer.addEventListener('play', updatePlayerUI);
-        audioPlayer.addEventListener('pause', updatePlayerUI);
-        audioPlayer.addEventListener('ended', updatePlayerUI);
-        audioPlayer.addEventListener('loadedmetadata', updatePlayerUI);
+        // --- AUTHENTICATION ---
+        const handleAdminLogin = () => {
+            const pass = prompt('Enter Admin Password:');
+            if (pass === 'fullstack.python') {
+                sessionStorage.setItem('isAdmin', 'true');
+                showView('admin-view');
+            } else if (pass !== null && pass !== '') {
+                alert('Incorrect Password.');
+            }
+        };
 
-        // Determine initial view
-        if (sessionStorage.getItem('isAdmin') === 'true') {
-            showView('admin-view');
-        } else {
+        const handleLogout = () => {
+            sessionStorage.removeItem('isAdmin');
+            audioPlayer.pause();
+            audioPlayer.src = '';
+            state.activeViewPrefix = null;
             showView('user-view');
-        }
-    };
+        };
 
-    init();
-});
+        // --- REQ 2: SEARCH FIX - JAVASCRIPT LOGIC ---
+        const populateSongLibrary = () => {
+            const songs = db.get();
+            const libraryEl = $('#song-library');
+            const statusMsg = $('#library-status-message');
+            
+            libraryEl.innerHTML = ''; // Clear only the card container
+            statusMsg.classList.add('hidden'); // Hide message by default
+
+            if (songs.length === 0) {
+                statusMsg.textContent = 'No songs available yet.';
+                statusMsg.classList.remove('hidden');
+                return;
+            }
+
+            songs.forEach((song) => {
+                const card = document.createElement('div');
+                card.className = 'song-card';
+                card.innerHTML = `
+                    <div>
+                        <h3 class="song-title">${song.songTitle}</h3>
+                        <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 14px;">${song.lyrics.length} lyric lines</p>
+                    </div>
+                    <button class="btn primary play-song-btn">▶️ Play</button>
+                `;
+                card.querySelector('.play-song-btn').addEventListener('click', () => {
+                    loadSongIntoPlayer(song, 'user');
+                    $('#song-library-container').classList.add('hidden');
+                    $('#user-player-view').classList.remove('hidden');
+                });
+                libraryEl.appendChild(card);
+            });
+        };
+
+        const filterSongs = (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const songCards = $$('.song-card');
+            const statusMsg = $('#library-status-message');
+            let visibleCount = 0;
+
+            songCards.forEach(card => {
+                const title = card.querySelector('.song-title').textContent.toLowerCase();
+                const isVisible = title.includes(query);
+                card.style.display = isVisible ? 'flex' : 'none';
+                if (isVisible) visibleCount++;
+            });
+            
+            const libraryIsEmpty = songCards.length === 0;
+            if (!libraryIsEmpty) {
+                if (visibleCount === 0 && query !== '') {
+                    statusMsg.textContent = `No results found for "${query}"`;
+                    statusMsg.classList.remove('hidden');
+                } else {
+                    statusMsg.classList.add('hidden');
+                }
+            }
+        };
+        
+        // --- ADMIN EDITOR ---
+        const clearEditorForm = () => {
+            state.project = { id: null, audioData: null, songTitle: '', lyrics: [] };
+            $('#songTitleInput').value = '';
+            $('#fileName').textContent = '📁 Upload Audio File';
+            $('#audioFile').value = ''; 
+            $('#lyrics-editor-area').innerHTML = '';
+            $('#save-song-btn').textContent = '🚀 Save Song';
+            $('#save-song-btn').disabled = false;
+            
+            $(`#song-title-display-admin`).textContent = 'Song Preview';
+            renderLiveLyrics([], 'admin');
+            if (state.activeViewPrefix === 'admin' && audioPlayer.src) {
+                 audioPlayer.src = '';
+                 state.activeViewPrefix = null;
+            }
+        }
+
+        const handleAudioUpload = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            $('#fileName').textContent = `Selected: ${file.name}`;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                state.project.audioData = e.target.result;
+                loadSongIntoPlayer({ ...state.project, songTitle: $('#songTitleInput').value || 'Audio Preview' }, 'admin');
+            };
+            reader.readAsDataURL(file);
+        };
+
+        const addNewLyricInputRow = (time = '', text = '') => {
+            const editorArea = $('#lyrics-editor-area');
+            const row = document.createElement('div');
+            row.className = 'lyric-input-row';
+            row.innerHTML = `
+                <input type="text" class="time-input" placeholder="mm:ss.ms" value="${time}">
+                <input type="text" class="lyric-text" placeholder="Enter lyric line..." value="${text}">
+                <button class="remove-line-btn">×</button>
+            `;
+            row.querySelector('.remove-line-btn').onclick = () => row.remove();
+            editorArea.appendChild(row);
+        };
+
+        const parseLyricsFromEditor = () => {
+            const lyrics = [];
+            $$('#lyrics-editor-area .lyric-input-row').forEach(row => {
+                const timeStr = row.querySelector('.time-input').value;
+                const text = row.querySelector('.lyric-text').value.trim();
+                if (text && timeStr) {
+                    const parts = timeStr.split(':');
+                    const secs = parts.length > 1 ? (parseInt(parts[0],10)*60) + parseFloat(parts[1]) : parseFloat(parts[0]);
+                    if (!isNaN(secs)) {
+                       lyrics.push({ text, start: secs });
+                    }
+                }
+            });
+            return lyrics.sort((a, b) => a.start - b.start);
+        };
+
+        const handlePreviewLyrics = () => {
+            if (!state.project.audioData) {
+                alert('Please upload an audio file first.');
+                return;
+            }
+            const currentLyrics = parseLyricsFromEditor();
+            const currentTitle = $('#songTitleInput').value.trim() || 'Song Preview';
+            loadSongIntoPlayer({ ...state.project, lyrics: currentLyrics, songTitle: currentTitle }, 'admin');
+        };
+
+        const handleSaveSong = () => {
+            const saveBtn = $('#save-song-btn');
+            state.project.lyrics = parseLyricsFromEditor();
+            state.project.songTitle = $('#songTitleInput').value.trim();
+
+            if (!state.project.songTitle) return alert('Please enter a song title.');
+            if (!state.project.audioData) return alert('Please upload an audio file for the song.');
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            
+            setTimeout(() => { 
+                let songs = db.get();
+                if (state.project.id) {
+                    const index = songs.findIndex(s => s.id === state.project.id);
+                    if (index > -1) songs[index] = { ...state.project };
+                } else { 
+                    songs.push({ ...state.project, id: Date.now() });
+                }
+                db.save(songs);
+                
+                alert(`"${state.project.songTitle}" was saved successfully!`);
+                
+                clearEditorForm();
+                populatePublishedSongsList();
+            }, 500);
+        };
+        
+        // --- ADMIN SONG MANAGEMENT ---
+        const populatePublishedSongsList = () => {
+            const songs = db.get();
+            const listEl = $('#song-list');
+            listEl.innerHTML = '';
+            if (songs.length === 0) {
+                listEl.innerHTML = '<li class="library-message" style="font-size: 14px; padding: 20px 0;">No songs published.</li>';
+                return;
+            }
+            songs.forEach(song => {
+                const item = document.createElement('li');
+                item.className = 'song-list-item';
+                item.innerHTML = `
+                    <span class="title">${song.songTitle}</span>
+                    <div class="actions">
+                        <button class="btn tool edit-btn">Edit</button>
+                        <button class="btn tool delete-btn">Delete</button>
+                    </div>
+                `;
+                item.querySelector('.edit-btn').onclick = () => loadSongForEditing(song.id);
+                item.querySelector('.delete-btn').onclick = () => handleDeleteSong(song.id, song.songTitle);
+                listEl.appendChild(item);
+            });
+        };
+
+        const loadSongForEditing = (songId) => {
+            const songs = db.get();
+            const songToEdit = songs.find(s => s.id === songId);
+            if (!songToEdit) return;
+
+            clearEditorForm();
+            state.project = { ...songToEdit };
+
+            $('#songTitleInput').value = songToEdit.songTitle;
+            $('#fileName').textContent = 'Audio loaded. Upload new file to replace.';
+            $('#lyrics-editor-area').innerHTML = '';
+            songToEdit.lyrics.forEach(line => {
+                 const minutes = Math.floor(line.start / 60);
+                 const seconds = (line.start % 60).toFixed(2);
+                 const time = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(5, '0')}`;
+                 addNewLyricInputRow(time, line.text);
+            });
+
+            $('#save-song-btn').textContent = '💾 Update Song';
+            loadSongIntoPlayer(songToEdit, 'admin');
+        };
+
+        const handleDeleteSong = (songId, songTitle) => {
+            if (!confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return;
+            
+            let songs = db.get().filter(s => s.id !== songId);
+            db.save(songs);
+            
+            populatePublishedSongsList();
+            alert(`"${songTitle}" has been deleted.`);
+            
+            if (state.project.id === songId) {
+                clearEditorForm();
+            }
+        };
+
+        // --- AUDIO PLAYER & LYRICS ---
+        const loadSongIntoPlayer = (song, viewPrefix) => {
+            audioPlayer.pause();
+            audioPlayer.src = song.audioData || '';
+            audioPlayer.currentTime = 0;
+
+            state.project = { ...song };
+            state.activeViewPrefix = viewPrefix;
+            state.currentLineIndex = -1;
+            
+            $(`#song-title-display-${viewPrefix}`).textContent = song.songTitle || 'Untitled Song';
+            renderLiveLyrics(song.lyrics || [], viewPrefix);
+            updatePlayerUI();
+        };
+
+        const updatePlayerUI = () => {
+            if (!state.activeViewPrefix) return;
+            const prefix = state.activeViewPrefix;
+            const { currentTime, duration } = audioPlayer;
+
+            $(`#cur-time-${prefix}`).textContent = fmt(currentTime);
+            $(`#dur-time-${prefix}`).textContent = fmt(duration);
+
+            if (isFinite(duration)) {
+                $(`#progress-bar-${prefix} .fill`).style.width = `${(currentTime / duration) * 100}%`;
+            }
+            $(`#pp-icon-${prefix}`).classList.toggle('play', !audioPlayer.paused);
+            $(`#pp-icon-${prefix}`).classList.toggle('pause', audioPlayer.paused);
+        };
+
+        const renderLiveLyrics = (lyrics, prefix) => {
+            const lyricWrap = $(`#lyric-wrap-${prefix}`);
+            lyricWrap.innerHTML = '';
+            if (!lyrics || lyrics.length === 0) {
+                lyricWrap.innerHTML = '<div class="line" style="opacity: 0.5; filter: none;">Lyrics will appear here.</div>';
+                return;
+            }
+            lyrics.forEach(line => {
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.textContent = line.text;
+                lyricWrap.appendChild(div);
+            });
+        };
+
+        const updateActiveLyrics = (time) => {
+            if (!state.activeViewPrefix || !state.project.lyrics || state.project.lyrics.length === 0) return;
+            
+            const prefix = state.activeViewPrefix;
+            let newIndex = state.project.lyrics.findIndex((line, i) => {
+                const nextLine = state.project.lyrics[i + 1];
+                return time >= line.start && (!nextLine || time < nextLine.start);
+            });
+
+            if (newIndex !== state.currentLineIndex) {
+                state.currentLineIndex = newIndex;
+                const lines = $$(`#lyric-wrap-${prefix} .line`);
+                lines.forEach((el, i) => {
+                    el.classList.toggle('active', i === newIndex);
+                });
+                if (newIndex > -1) {
+                    lines[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        };
+        
+        // --- INITIALIZATION ---
+        const init = () => {
+            // Global Listeners
+            $('#admin-login-btn').addEventListener('click', handleAdminLogin);
+            $('#logout-btn').addEventListener('click', handleLogout);
+            $('#search-box').addEventListener('input', filterSongs);
+            $('#back-to-library-btn').addEventListener('click', () => {
+                audioPlayer.pause();
+                $('#user-player-view').classList.add('hidden');
+                $('#song-library-container').classList.remove('hidden');
+            });
+            
+            // Admin Editor listeners
+            $('#audioFile').addEventListener('change', handleAudioUpload);
+            $('#addLineBtn').addEventListener('click', () => addNewLyricInputRow());
+            $('#preview-lyrics-btn').addEventListener('click', handlePreviewLyrics);
+            $('#save-song-btn').addEventListener('click', handleSaveSong);
+            $('#clear-form-btn').addEventListener('click', clearEditorForm);
+
+            // Player UI Listeners
+            ['user', 'admin'].forEach(prefix => {
+                $(`#play-btn-${prefix}`).onclick = () => audioPlayer.paused ? audioPlayer.play() : audioPlayer.pause();
+                $(`#progress-bar-${prefix}`).onclick = (e) => {
+                    if (!isFinite(audioPlayer.duration)) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    audioPlayer.currentTime = clamp((e.clientX - rect.left) / rect.width, 0, 1) * audioPlayer.duration;
+                };
+            });
+
+            // Audio Player core events
+            audioPlayer.addEventListener('timeupdate', () => {
+                updatePlayerUI();
+                updateActiveLyrics(audioPlayer.currentTime);
+            });
+            audioPlayer.addEventListener('play', updatePlayerUI);
+            audioPlayer.addEventListener('pause', updatePlayerUI);
+            audioPlayer.addEventListener('ended', updatePlayerUI);
+            audioPlayer.addEventListener('loadedmetadata', updatePlayerUI);
+
+            // Determine initial view
+            if (sessionStorage.getItem('isAdmin') === 'true') {
+                showView('admin-view');
+            } else {
+                showView('user-view');
+            }
+        };
+
+        init();
+    });
 </script>
 </body>
 </html>
