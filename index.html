@@ -199,22 +199,25 @@
     <audio id="audio-player"></audio>
 
 <script type="module">
-    // --- FIREBASE INITIALIZATION ---
+    // --- FIREBASE INITIALIZATION (UPDATED) ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
     import { getFirestore, collection, getDocs, doc, addDoc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+    // Your new web app's Firebase configuration
     const firebaseConfig = {
-      apiKey: "AIzaSyBDglKUCdb640OPMbAhlY_neBNG6uN2Uds",
-      authDomain: "musicflow-b5651.firebaseapp.com",
-      projectId: "musicflow-b5651",
-      storageBucket: "musicflow-b5651.firebasestorage.app",
-      messagingSenderId: "522557409379",
-      appId: "1:522557409379:web:18df960e9c09d9c1da9056",
-      measurementId: "G-E40ESW5FZH"
+      apiKey: "AIzaSyC5MIreq4c75KxHTxHHXRL_Ashfp-IPWkk",
+      authDomain: "musictheflow-8b199.firebaseapp.com",
+      databaseURL: "https://musictheflow-8b199-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "musictheflow-8b199",
+      storageBucket: "musictheflow-8b199.firebasestorage.app",
+      messagingSenderId: "772613341170",
+      appId: "1:772613341170:web:6b3753d0a0c24710da356b",
+      measurementId: "G-H7MGX6BPSE"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const db = getFirestore(app);
